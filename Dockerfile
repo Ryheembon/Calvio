@@ -7,4 +7,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ .
 
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Railway sets PORT; fall back to 8000 for local docker runs
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
