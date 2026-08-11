@@ -26,6 +26,8 @@ def migrate_schema() -> None:
         "ALTER TABLE users ADD COLUMN stripe_customer_id VARCHAR(255)",
         "ALTER TABLE users ADD COLUMN stripe_subscription_id VARCHAR(255)",
         "ALTER TABLE users ADD COLUMN plan_status VARCHAR(32) DEFAULT 'free'",
+        "ALTER TABLE users ADD COLUMN reset_token_hash VARCHAR(64)",
+        "ALTER TABLE users ADD COLUMN reset_token_expires DATETIME",
     ]
     with engine.begin() as conn:
         for sql in statements:

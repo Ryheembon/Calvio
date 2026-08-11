@@ -5,7 +5,15 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
-from .auth import create_access_token, get_current_user, hash_password, slugify, verify_password
+from .auth import (
+    create_access_token,
+    create_password_reset_token,
+    get_current_user,
+    hash_password,
+    hash_reset_token,
+    slugify,
+    verify_password,
+)
 from .billing import (
     apply_subscription,
     ensure_customer,
@@ -23,11 +31,16 @@ from .schemas import (
     BookRequest,
     BusinessOut,
     BusinessUpdate,
+    ChangePasswordRequest,
     CheckoutResponse,
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
     LoginRequest,
+    MessageResponse,
     PortalResponse,
     PublicBusinessOut,
     RegisterRequest,
+    ResetPasswordRequest,
     SlotOut,
     TokenResponse,
 )
@@ -110,6 +123,69 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     return TokenResponse(access_token=create_access_token(user.id))
+
+
+@app.post("/api/auth/forgot-password", response_model=ForgotPasswordResponse)
+def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """Always return the same message so emails can't be guessed."""
+    generic = "If that email is registered, we sent a password reset link."
+    user = db.query(User).filter(User.email == payload.email.lower()).first()
+    if not user:
+        return ForgotPasswordResponse(message=generic)
+
+    raw_token, token_hash, expires = create_password_reset_token()
+    user.reset_token_hash = token_hash
+    user.reset_token_expires = expires
+    db.commit()
+
+    reset_url = f"{settings.frontend_url}/reset-password?token={raw_token}"
+    send_email(
+        user.email,
+        "Reset your Calvio password",
+        (
+            "Reset your Calvio password using this link (expires in 1 hour):\n\n"
+            f"{reset_url}\n\n"
+            "If you did not ask for this, you can ignore this email.\n"
+        ),
+    )
+
+    # Without SMTP, email only prints in Railway logs — also return the link so you can test.
+    if not settings.smtp_host:
+        return ForgotPasswordResponse(message=generic, reset_url=reset_url)
+    return ForgotPasswordResponse(message=generic)
+
+
+@app.post("/api/auth/reset-password", response_model=MessageResponse)
+def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    token_hash = hash_reset_token(payload.token)
+    user = db.query(User).filter(User.reset_token_hash == token_hash).first()
+    if (
+        not user
+        or not user.reset_token_expires
+        or user.reset_token_expires < datetime.utcnow()
+    ):
+        raise HTTPException(status_code=400, detail="Reset link is invalid or expired")
+
+    user.password_hash = hash_password(payload.password)
+    user.reset_token_hash = None
+    user.reset_token_expires = None
+    db.commit()
+    return MessageResponse(message="Password updated. You can log in now.")
+
+
+@app.post("/api/me/change-password", response_model=MessageResponse)
+def change_password(
+    payload: ChangePasswordRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is wrong")
+    user.password_hash = hash_password(payload.new_password)
+    user.reset_token_hash = None
+    user.reset_token_expires = None
+    db.commit()
+    return MessageResponse(message="Password changed.")
 
 
 @app.get("/api/me", response_model=BusinessOut)

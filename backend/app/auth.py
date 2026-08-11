@@ -1,3 +1,5 @@
+import hashlib
+import secrets
 from datetime import datetime, timedelta
 
 from fastapi import Depends, HTTPException, status
@@ -11,6 +13,7 @@ from .database import get_db
 from .models import User
 
 security = HTTPBearer()
+RESET_TOKEN_HOURS = 1
 
 
 def hash_password(password: str) -> str:
@@ -19,6 +22,17 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, password_hash: str) -> bool:
     return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+
+
+def hash_reset_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def create_password_reset_token() -> tuple[str, str, datetime]:
+    raw = secrets.token_urlsafe(32)
+    token_hash = hash_reset_token(raw)
+    expires = datetime.utcnow() + timedelta(hours=RESET_TOKEN_HOURS)
+    return raw, token_hash, expires
 
 
 def create_access_token(user_id: int) -> str:

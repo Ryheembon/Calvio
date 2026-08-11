@@ -17,6 +17,10 @@ export default function Dashboard() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [billingBusy, setBillingBusy] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -105,6 +109,31 @@ export default function Dashboard() {
     } catch (err) {
       setError(err.message);
       setBillingBusy(false);
+    }
+  }
+
+  async function changePassword(event) {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+    if (newPassword !== confirmPassword) {
+      setError("New passwords do not match.");
+      return;
+    }
+    setPasswordBusy(true);
+    try {
+      const data = await api.changePassword({
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
+      setMessage(data.message);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setPasswordBusy(false);
     }
   }
 
@@ -230,6 +259,44 @@ export default function Dashboard() {
               </select>
             </label>
             <button className="btn btn-primary">Save profile</button>
+          </form>
+        </section>
+
+        <section className="panel">
+          <h2>Change password</h2>
+          <form onSubmit={changePassword} className="stack-form">
+            <label>
+              Current password
+              <input
+                required
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+              />
+            </label>
+            <label>
+              New password
+              <input
+                required
+                type="password"
+                minLength={6}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </label>
+            <label>
+              Confirm new password
+              <input
+                required
+                type="password"
+                minLength={6}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </label>
+            <button className="btn btn-primary" disabled={passwordBusy}>
+              {passwordBusy ? "Saving…" : "Update password"}
+            </button>
           </form>
         </section>
 

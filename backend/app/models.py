@@ -19,6 +19,8 @@ class User(Base):
     stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
     plan_status: Mapped[str] = mapped_column(String(32), default="free")  # free | active | past_due | canceled
+    reset_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
+    reset_token_expires: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     availability = relationship("Availability", back_populates="user", cascade="all, delete-orphan")
