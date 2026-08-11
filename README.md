@@ -51,12 +51,45 @@ frontend/src/    React pages (landing, dashboard, public book page)
 
 ## Later (scale path)
 
-- Stripe subscriptions ($19/mo)
 - SMS reminders
 - Deposits / cancellation window
 - Multiple staff calendars
+
+## Stripe (Calvio Pro — $19/mo)
+
+Businesses can upgrade from the dashboard. Free accounts still work; Pro is optional for now.
+
+### 1. Stripe Dashboard (test mode)
+
+1. Create a Product: **Calvio Pro**
+2. Add a recurring price: **$19 / month**
+3. Copy the Price ID (`price_...`)
+4. Copy your Secret key (`sk_test_...`)
+
+### 2. Railway variables
+
+| Variable | Value |
+|----------|--------|
+| `STRIPE_SECRET_KEY` | `sk_test_...` |
+| `STRIPE_PRICE_ID` | `price_...` |
+| `STRIPE_WEBHOOK_SECRET` | from step 3 (`whsec_...`) |
+| `FRONTEND_URL` | `https://calvio-three.vercel.app` |
+
+### 3. Webhook
+
+In Stripe → Developers → Webhooks → Add endpoint:
+
+- URL: `https://calvio-production-ff2c.up.railway.app/api/billing/webhook`
+- Events: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`
+
+Copy the signing secret into `STRIPE_WEBHOOK_SECRET`.
+
+### 4. Customer portal (optional but recommended)
+
+Stripe → Settings → Billing → Customer portal → turn on cancel/update payment method.
 
 ## Notes
 
 - SQLite database file is created at `backend/calvio.db`
 - Change `secret_key` before any real deployment (`backend/app/config.py` or a `.env` file)
+- Use Stripe **test mode** until you are ready for real charges

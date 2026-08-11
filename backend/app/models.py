@@ -16,10 +16,17 @@ class User(Base):
     slug: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     bio: Mapped[str] = mapped_column(Text, default="")
     slot_minutes: Mapped[int] = mapped_column(Integer, default=30)
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
+    plan_status: Mapped[str] = mapped_column(String(32), default="free")  # free | active | past_due | canceled
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     availability = relationship("Availability", back_populates="user", cascade="all, delete-orphan")
     appointments = relationship("Appointment", back_populates="user", cascade="all, delete-orphan")
+
+    @property
+    def is_pro(self) -> bool:
+        return (self.plan_status or "free") == "active"
 
 
 class Availability(Base):

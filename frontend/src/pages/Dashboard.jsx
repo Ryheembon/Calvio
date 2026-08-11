@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, formatWhen, minutesToTime, timeToMinutes } from "../api";
 import { clearToken } from "../auth";
 
@@ -7,6 +7,7 @@ const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Satu
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [me, setMe] = useState(null);
   const [appointments, setAppointments] = useState([]);
   const [bio, setBio] = useState("");
@@ -15,6 +16,7 @@ export default function Dashboard() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [billingBusy, setBillingBusy] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -34,6 +36,18 @@ export default function Dashboard() {
     }
     load();
   }, [navigate]);
+
+  useEffect(() => {
+    const billing = searchParams.get("billing");
+    if (!billing) return;
+    if (billing === "success") {
+      setMessage("Payment received. Calvio Pro will show as active in a few seconds.");
+      api.me().then(setMe).catch(() => {});
+    } else if (billing === "cancel") {
+      setError("Checkout canceled. You can upgrade anytime.");
+    }
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   function updateDay(day, patch) {
     setAvailability((prev) =>
@@ -68,6 +82,32 @@ export default function Dashboard() {
     }
   }
 
+  async function startCheckout() {
+    setError("");
+    setMessage("");
+    setBillingBusy(true);
+    try {
+      const { url } = await api.createCheckout();
+      window.location.href = url;
+    } catch (err) {
+      setError(err.message);
+      setBillingBusy(false);
+    }
+  }
+
+  async function openPortal() {
+    setError("");
+    setMessage("");
+    setBillingBusy(true);
+    try {
+      const { url } = await api.createPortal();
+      window.location.href = url;
+    } catch (err) {
+      setError(err.message);
+      setBillingBusy(false);
+    }
+  }
+
   function logout() {
     clearToken();
     navigate("/");
@@ -83,6 +123,7 @@ export default function Dashboard() {
 
   const bookingUrl = `${window.location.origin}/b/${me.slug}`;
   const upcoming = appointments.filter((a) => new Date(a.starts_at) >= new Date());
+  const isPro = Boolean(me.is_pro);
 
   return (
     <div className="page dashboard">
@@ -103,7 +144,10 @@ export default function Dashboard() {
       <section className="dash-hero">
         <div>
           <p className="eyebrow">Your booking page</p>
-          <h1>{me.business_name}</h1>
+          <h1>
+            {me.business_name}
+            {isPro ? <span className="pro-badge">Pro</span> : null}
+          </h1>
           <p className="share-line">
             Share this link: <a href={bookingUrl}>{bookingUrl}</a>
           </p>
@@ -115,6 +159,37 @@ export default function Dashboard() {
       )}
 
       <div className="dash-grid">
+        <section className="panel">
+          <h2>Plan</h2>
+          {isPro ? (
+            <>
+              <p>You are on <strong>Calvio Pro</strong> ($19/mo).</p>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={billingBusy}
+                onClick={openPortal}
+              >
+                {billingBusy ? "Opening…" : "Manage billing"}
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="muted">
+                Free plan works for getting started. Upgrade to Pro when you are ready to grow.
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={billingBusy}
+                onClick={startCheckout}
+              >
+                {billingBusy ? "Redirecting…" : "Upgrade to Pro — $19/mo"}
+              </button>
+            </>
+          )}
+        </section>
+
         <section className="panel">
           <h2>Upcoming appointments</h2>
           {upcoming.length === 0 ? (

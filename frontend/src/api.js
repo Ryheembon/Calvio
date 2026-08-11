@@ -44,6 +44,8 @@ export const api = {
   updateAvailability: (body) =>
     request("/api/me/availability", { method: "PUT", body: JSON.stringify(body) }),
   appointments: () => request("/api/me/appointments"),
+  createCheckout: () => request("/api/billing/checkout", { method: "POST" }),
+  createPortal: () => request("/api/billing/portal", { method: "POST" }),
   publicBusiness: (slug) => request(`/api/public/${slug}`),
   publicSlots: (slug, day) => request(`/api/public/${slug}/slots?day=${day}`),
   book: (slug, body) =>

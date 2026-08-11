@@ -1,12 +1,20 @@
 from datetime import date, datetime, timedelta
 
-from fastapi import Depends, FastAPI, HTTPException, Query, status
+import stripe
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from .auth import create_access_token, get_current_user, hash_password, slugify, verify_password
+from .billing import (
+    apply_subscription,
+    ensure_customer,
+    plan_from_subscription_status,
+    require_stripe,
+    stripe_ready,
+)
 from .config import settings
-from .database import Base, engine, get_db
+from .database import Base, engine, get_db, migrate_schema
 from .emailer import send_email
 from .models import Appointment, Availability, User
 from .schemas import (
@@ -15,7 +23,9 @@ from .schemas import (
     BookRequest,
     BusinessOut,
     BusinessUpdate,
+    CheckoutResponse,
     LoginRequest,
+    PortalResponse,
     PublicBusinessOut,
     RegisterRequest,
     SlotOut,
@@ -24,6 +34,7 @@ from .schemas import (
 from .slots import default_availability_rows, get_open_slots
 
 Base.metadata.create_all(bind=engine)
+migrate_schema()
 
 app = FastAPI(title="Calvio API", version="0.1.0")
 
@@ -46,6 +57,7 @@ def business_out(user: User) -> BusinessOut:
         )
         for row in sorted(user.availability, key=lambda r: r.day_of_week)
     ]
+    plan_status = user.plan_status or "free"
     return BusinessOut(
         id=user.id,
         email=user.email,
@@ -53,6 +65,8 @@ def business_out(user: User) -> BusinessOut:
         slug=user.slug,
         bio=user.bio or "",
         slot_minutes=user.slot_minutes,
+        plan_status=plan_status,
+        is_pro=plan_status == "active",
         availability=availability,
     )
 
@@ -155,6 +169,98 @@ def my_appointments(user: User = Depends(get_current_user), db: Session = Depend
         .all()
     )
     return rows
+
+
+@app.post("/api/billing/checkout", response_model=CheckoutResponse)
+def create_checkout(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_stripe()
+    if (user.plan_status or "free") == "active":
+        raise HTTPException(status_code=400, detail="You already have Calvio Pro")
+
+    customer_id = ensure_customer(db, user)
+    session = stripe.checkout.Session.create(
+        mode="subscription",
+        customer=customer_id,
+        line_items=[{"price": settings.stripe_price_id, "quantity": 1}],
+        success_url=f"{settings.frontend_url}/dashboard?billing=success",
+        cancel_url=f"{settings.frontend_url}/dashboard?billing=cancel",
+        client_reference_id=str(user.id),
+        metadata={"user_id": str(user.id)},
+        subscription_data={"metadata": {"user_id": str(user.id)}},
+    )
+    if not session.url:
+        raise HTTPException(status_code=500, detail="Could not start Stripe Checkout")
+    return CheckoutResponse(url=session.url)
+
+
+@app.post("/api/billing/portal", response_model=PortalResponse)
+def create_portal(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    require_stripe()
+    customer_id = ensure_customer(db, user)
+    session = stripe.billing_portal.Session.create(
+        customer=customer_id,
+        return_url=f"{settings.frontend_url}/dashboard",
+    )
+    return PortalResponse(url=session.url)
+
+
+@app.post("/api/billing/webhook")
+async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
+    if not settings.stripe_webhook_secret:
+        raise HTTPException(status_code=503, detail="Stripe webhook secret is not configured")
+
+    stripe.api_key = settings.stripe_secret_key
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature")
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, settings.stripe_webhook_secret)
+    except Exception as exc:
+        if type(exc).__name__ == "SignatureVerificationError":
+            raise HTTPException(status_code=400, detail="Invalid signature") from exc
+        if isinstance(exc, ValueError):
+            raise HTTPException(status_code=400, detail="Invalid payload") from exc
+        raise
+
+    event_type = event["type"]
+    data = event["data"]["object"]
+
+    if event_type == "checkout.session.completed":
+        user_id = (data.get("metadata") or {}).get("user_id") or data.get("client_reference_id")
+        subscription_id = data.get("subscription")
+        customer_id = data.get("customer")
+        user = db.query(User).filter(User.id == int(user_id)).first() if user_id else None
+        if user:
+            if customer_id:
+                user.stripe_customer_id = customer_id
+            if subscription_id:
+                subscription = stripe.Subscription.retrieve(subscription_id)
+                apply_subscription(db, user, subscription)
+            else:
+                user.plan_status = "active"
+                db.commit()
+
+    elif event_type in ("customer.subscription.updated", "customer.subscription.deleted"):
+        user = None
+        metadata = data.get("metadata") or {}
+        if metadata.get("user_id"):
+            user = db.query(User).filter(User.id == int(metadata["user_id"])).first()
+        if not user and data.get("id"):
+            user = db.query(User).filter(User.stripe_subscription_id == data["id"]).first()
+        if not user and data.get("customer"):
+            user = db.query(User).filter(User.stripe_customer_id == data["customer"]).first()
+        if user:
+            user.stripe_subscription_id = data.get("id") or user.stripe_subscription_id
+            user.plan_status = plan_from_subscription_status(data.get("status"))
+            if event_type == "customer.subscription.deleted":
+                user.plan_status = "canceled"
+            db.commit()
+
+    return {"received": True}
+
+
+@app.get("/api/billing/status")
+def billing_status():
+    return {"stripe_configured": stripe_ready()}
 
 
 @app.get("/api/public/{slug}", response_model=PublicBusinessOut)

@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     email_from: str = "Calvio <noreply@calvio.local>"
+    # Stripe (Option A: business pays $19/mo). Leave blank until configured.
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_price_id: str = ""
 
     class Config:
         env_file = ".env"

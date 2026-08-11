@@ -41,10 +41,20 @@ class BusinessOut(BaseModel):
     slug: str
     bio: str
     slot_minutes: int
+    plan_status: str = "free"
+    is_pro: bool = False
     availability: list[AvailabilityItem]
 
     class Config:
         from_attributes = True
+
+
+class CheckoutResponse(BaseModel):
+    url: str
+
+
+class PortalResponse(BaseModel):
+    url: str
 
 
 class PublicBusinessOut(BaseModel):

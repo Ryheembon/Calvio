@@ -6,3 +6,4 @@ python-jose==3.5.0
 email-validator==2.3.0
 python-multipart==0.0.32
 pydantic-settings==2.15.0
+stripe==14.4.1
