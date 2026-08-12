@@ -27,7 +27,7 @@ export default function Landing() {
             <p className="brand-mark brand-mark-hero">Calvio</p>
             <h1 className="hero-title">A booking page any client can use.</h1>
             <p className="lede lede-on-dark">
-              One link for your business. People pick a time. You both get the confirmation.
+              One link for your business. Try 2 bookings free, then upgrade to Pro for unlimited.
             </p>
             <div className="cta-row">
               <Link to="/register" className="btn btn-accent btn-lg">

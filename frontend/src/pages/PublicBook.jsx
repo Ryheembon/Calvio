@@ -112,11 +112,20 @@ export default function PublicBook() {
           <p className="muted">{business.slot_minutes}-minute appointments</p>
         </header>
 
+        {business.accepting_bookings === false ? (
+          <p className="error banner">
+            This page isn’t taking new bookings right now. Check back after they upgrade.
+          </p>
+        ) : null}
+
+        {business.accepting_bookings !== false && (
         <label className="day-picker">
           Pick a day
           <input type="date" min={today} value={day} onChange={(e) => setDay(e.target.value)} />
         </label>
+        )}
 
+        {business.accepting_bookings !== false && (
         <div className="slot-grid">
           {slots.length === 0 ? (
             <p className="muted">No open times this day. Try another date.</p>
@@ -139,8 +148,9 @@ export default function PublicBook() {
             })
           )}
         </div>
+        )}
 
-        {selected && (
+        {business.accepting_bookings !== false && selected && (
           <form className="stack-form book-form" onSubmit={onBook}>
             <h2>Your details</h2>
             <p className="muted">Selected: {formatWhen(selected)}</p>

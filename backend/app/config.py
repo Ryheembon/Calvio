@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
     stripe_price_id: str = ""
+    free_booking_limit: int = 2
 
     class Config:
         env_file = ".env"

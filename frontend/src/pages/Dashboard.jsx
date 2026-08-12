@@ -226,8 +226,14 @@ export default function Dashboard() {
             </>
           ) : (
             <>
+              <p>
+                Free plan: <strong>{me.bookings_used || 0}</strong> of{" "}
+                <strong>{me.bookings_limit || 2}</strong> bookings used.
+              </p>
               <p className="muted">
-                Free plan works for getting started. Upgrade to Pro when you are ready to grow.
+                {me.bookings_remaining === 0
+                  ? "You've used both free bookings. Upgrade to keep taking appointments."
+                  : `${me.bookings_remaining} free booking${me.bookings_remaining === 1 ? "" : "s"} left, then Pro is required.`}
               </p>
               <button
                 type="button"

@@ -67,6 +67,9 @@ class BusinessOut(BaseModel):
     slot_minutes: int
     plan_status: str = "free"
     is_pro: bool = False
+    bookings_used: int = 0
+    bookings_limit: int = 2
+    bookings_remaining: int | None = None
     availability: list[AvailabilityItem]
 
     class Config:
@@ -86,6 +89,7 @@ class PublicBusinessOut(BaseModel):
     slug: str
     bio: str
     slot_minutes: int
+    accepting_bookings: bool = True
 
 
 class SlotOut(BaseModel):
