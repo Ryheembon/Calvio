@@ -275,7 +275,7 @@ export default function Dashboard() {
                 rows={3}
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
-                placeholder="Haircuts, fades, and beard trims downtown."
+                placeholder="What you offer and where clients can find you."
               />
             </label>
             <label>
