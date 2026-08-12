@@ -36,6 +36,7 @@ body,
 
 body {
   min-width: 320px;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at 12% 18%, rgba(196, 92, 38, 0.12), transparent 28%),
     radial-gradient(circle at 88% 8%, rgba(11, 61, 58, 0.16), transparent 30%),
@@ -99,6 +100,8 @@ h2,
 .top-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.85rem;
 }
 
@@ -106,6 +109,7 @@ h2,
   border: 0;
   border-radius: 999px;
   padding: 0.7rem 1.15rem;
+  min-height: 44px;
   cursor: pointer;
   transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
@@ -382,6 +386,16 @@ h2,
 }
 
 @media (max-width: 760px) {
+  .page {
+    width: min(1100px, calc(100% - 1.25rem));
+    padding: 1rem 0 2.5rem;
+  }
+
+  .topbar {
+    gap: 0.6rem;
+    margin-bottom: 1.25rem;
+  }
+
   .dash-grid {
     grid-template-columns: 1fr;
   }
@@ -391,16 +405,33 @@ h2,
   }
 
   .landing-hero-inner {
+    width: min(1100px, calc(100% - 1.25rem));
     padding-bottom: 2rem;
   }
 
   .hero-copy {
     padding-top: 2.5rem;
+    padding-bottom: 1.5rem;
   }
 
   .landing-hero-glow {
     opacity: 0.7;
     right: -20%;
+  }
+
+  .cta-row .btn,
+  .how-cta .btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .book-shell,
+  .auth-card {
+    width: min(560px, 100%);
+  }
+
+  .slot-btn {
+    min-height: 44px;
   }
 }
 
@@ -464,6 +495,7 @@ select {
   border-radius: 12px;
   padding: 0.7rem 0.8rem;
   color: var(--ink);
+  font-size: 16px;
 }
 
 input:focus,
