@@ -621,6 +621,16 @@ select:focus {
   border-bottom: 1px solid var(--line);
 }
 
+.appt-notes {
+  color: var(--ink);
+  background: rgba(196, 92, 38, 0.08);
+  border-radius: 10px;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.92rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .hours-form {
   display: grid;
   gap: 0.7rem;

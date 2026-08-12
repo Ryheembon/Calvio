@@ -258,6 +258,7 @@ export default function Dashboard() {
                   <strong>{appt.client_name}</strong>
                   <span>{formatWhen(appt.starts_at)}</span>
                   <span className="muted">{appt.client_email}</span>
+                  {appt.notes ? <span className="appt-notes">Note: {appt.notes}</span> : null}
                   <button
                     type="button"
                     className="btn btn-ghost btn-small"
