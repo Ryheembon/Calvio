@@ -10,8 +10,8 @@ Built for learning + shipping: **React** frontend + **Python FastAPI** backend.
 - Create an account and get a public booking link (`/b/your-name`)
 - Set weekly hours + appointment length
 - Clients book open time slots
-- Dashboard shows upcoming appointments
-- Emails print in the backend terminal (SMTP optional later)
+- Dashboard shows upcoming appointments and lets you cancel them
+- Confirmation + password-reset emails via SMTP (prints to logs if not configured)
 
 ## Run locally
 
@@ -40,7 +40,7 @@ App: http://127.0.0.1:5173
 2. Create a business (example slug: `mayas-cuts`)
 3. In the dashboard, set hours + bio
 4. Open your public page and book a slot with a test email
-5. Check the backend terminal for the confirmation “emails”
+5. Check the inbox (or backend logs if SMTP is not set) for confirmation emails
 
 ## Project layout
 
@@ -54,6 +54,39 @@ frontend/src/    React pages (landing, dashboard, public book page)
 - SMS reminders
 - Deposits / cancellation window
 - Multiple staff calendars
+
+## Railway Postgres
+
+SQLite is fine locally. On Railway, add a **Postgres** database so bookings survive redeploys.
+
+1. Railway project → **+ New** → **Database** → **PostgreSQL**
+2. Open your **Calvio** service → **Variables**
+3. Add / connect `DATABASE_URL` from the Postgres service (Railway can insert `${{Postgres.DATABASE_URL}}`)
+4. Redeploy the backend
+
+Health check should then show `"database": "postgres"`:
+`https://calvio-production-ff2c.up.railway.app/api/health`
+
+Your old SQLite file on Railway will not copy over — register again after the switch if needed.
+
+## Real email (SMTP)
+
+Easiest beginner option: [Resend](https://resend.com) (free test emails).
+
+1. Create a Resend account → **API Keys** → copy `re_...`
+2. Railway → Calvio service → **Variables**:
+
+| Variable | Value |
+|----------|--------|
+| `SMTP_HOST` | `smtp.resend.com` |
+| `SMTP_PORT` | `587` |
+| `SMTP_USER` | `resend` |
+| `SMTP_PASSWORD` | your `re_...` key |
+| `EMAIL_FROM` | `Calvio <onboarding@resend.dev>` |
+
+3. Redeploy. Health check should show `"email": true`.
+
+Until you verify your own domain, Resend only sends to **your** Resend account email. That is enough to test booking + password reset.
 
 ## Stripe (Calvio Pro — $19/mo)
 
@@ -90,6 +123,7 @@ Stripe → Settings → Billing → Customer portal → turn on cancel/update pa
 
 ## Notes
 
-- SQLite database file is created at `backend/calvio.db`
+- Local SQLite file is created at `backend/calvio.db`
+- On Railway, use Postgres via `DATABASE_URL`
 - Change `secret_key` before any real deployment (`backend/app/config.py` or a `.env` file)
 - Use Stripe **test mode** until you are ready for real charges

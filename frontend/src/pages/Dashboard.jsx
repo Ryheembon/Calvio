@@ -21,6 +21,7 @@ export default function Dashboard() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordBusy, setPasswordBusy] = useState(false);
+  const [cancelingId, setCancelingId] = useState(null);
 
   useEffect(() => {
     async function load() {
@@ -137,6 +138,25 @@ export default function Dashboard() {
     }
   }
 
+  async function cancelAppointment(appt) {
+    const when = formatWhen(appt.starts_at);
+    if (!window.confirm(`Cancel ${appt.client_name}'s booking on ${when}?`)) {
+      return;
+    }
+    setError("");
+    setMessage("");
+    setCancelingId(appt.id);
+    try {
+      const updated = await api.cancelAppointment(appt.id);
+      setAppointments((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
+      setMessage(`Canceled ${appt.client_name}'s booking.`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCancelingId(null);
+    }
+  }
+
   function logout() {
     clearToken();
     navigate("/");
@@ -151,7 +171,9 @@ export default function Dashboard() {
   }
 
   const bookingUrl = `${window.location.origin}/b/${me.slug}`;
-  const upcoming = appointments.filter((a) => new Date(a.starts_at) >= new Date());
+  const upcoming = appointments.filter(
+    (a) => a.status !== "canceled" && new Date(a.starts_at) >= new Date(),
+  );
   const isPro = Boolean(me.is_pro);
 
   return (
@@ -230,6 +252,14 @@ export default function Dashboard() {
                   <strong>{appt.client_name}</strong>
                   <span>{formatWhen(appt.starts_at)}</span>
                   <span className="muted">{appt.client_email}</span>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-small"
+                    disabled={cancelingId === appt.id}
+                    onClick={() => cancelAppointment(appt)}
+                  >
+                    {cancelingId === appt.id ? "Canceling…" : "Cancel"}
+                  </button>
                 </li>
               ))}
             </ul>

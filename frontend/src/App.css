@@ -151,6 +151,12 @@ h2,
   color: var(--forest);
 }
 
+.btn-small {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  justify-self: start;
+}
+
 .text-link {
   color: var(--forest);
   text-decoration: none;

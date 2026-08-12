@@ -22,8 +22,8 @@ from .billing import (
     stripe_ready,
 )
 from .config import settings
-from .database import Base, engine, get_db, migrate_schema
-from .emailer import send_email
+from .database import IS_SQLITE, Base, engine, get_db, migrate_schema
+from .emailer import email_configured, send_email
 from .models import Appointment, Availability, User
 from .schemas import (
     AppointmentOut,
@@ -86,7 +86,12 @@ def business_out(user: User) -> BusinessOut:
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "product": "Calvio"}
+    return {
+        "ok": True,
+        "product": "Calvio",
+        "database": "sqlite" if IS_SQLITE else "postgres",
+        "email": email_configured(),
+    }
 
 
 @app.post("/api/auth/register", response_model=TokenResponse)
@@ -149,8 +154,8 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
         ),
     )
 
-    # Without SMTP, email only prints in Railway logs — also return the link so you can test.
-    if not settings.smtp_host:
+    # Without SMTP, email only prints in logs — also return the link so you can test.
+    if not email_configured():
         return ForgotPasswordResponse(message=generic, reset_url=reset_url)
     return ForgotPasswordResponse(message=generic)
 
@@ -245,6 +250,51 @@ def my_appointments(user: User = Depends(get_current_user), db: Session = Depend
         .all()
     )
     return rows
+
+
+@app.post("/api/me/appointments/{appointment_id}/cancel", response_model=AppointmentOut)
+def cancel_appointment(
+    appointment_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    appointment = (
+        db.query(Appointment)
+        .filter(Appointment.id == appointment_id, Appointment.user_id == user.id)
+        .first()
+    )
+    if not appointment:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+    if appointment.status == "canceled":
+        raise HTTPException(status_code=400, detail="That booking is already canceled")
+    if appointment.starts_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Past appointments can't be canceled")
+
+    appointment.status = "canceled"
+    db.commit()
+    db.refresh(appointment)
+
+    when = appointment.starts_at.strftime("%A, %b %d at %I:%M %p")
+    send_email(
+        appointment.client_email,
+        f"Canceled: {user.business_name}",
+        (
+            f"Your appointment with {user.business_name} was canceled.\n\n"
+            f"When it was: {when}\n"
+            "If you still need a time, book again on their Calvio page.\n"
+        ),
+    )
+    send_email(
+        user.email,
+        f"Canceled booking: {appointment.client_name}",
+        (
+            f"You canceled a booking for {user.business_name}.\n\n"
+            f"Client: {appointment.client_name}\n"
+            f"Email: {appointment.client_email}\n"
+            f"When: {when}\n"
+        ),
+    )
+    return appointment
 
 
 @app.post("/api/billing/checkout", response_model=CheckoutResponse)
