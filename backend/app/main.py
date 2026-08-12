@@ -338,6 +338,7 @@ def create_checkout(user: User = Depends(get_current_user), db: Session = Depend
             mode="subscription",
             customer=customer_id,
             line_items=[{"price": settings.stripe_price_id, "quantity": 1}],
+            payment_method_types=["card"],
             success_url=f"{frontend_origin}/dashboard?billing=success",
             cancel_url=f"{frontend_origin}/dashboard?billing=cancel",
             client_reference_id=str(user.id),
