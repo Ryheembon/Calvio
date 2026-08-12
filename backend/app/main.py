@@ -19,6 +19,7 @@ from .billing import (
     ensure_customer,
     plan_from_subscription_status,
     require_stripe,
+    stripe_error,
     stripe_ready,
 )
 from .config import settings
@@ -46,14 +47,36 @@ from .schemas import (
 )
 from .slots import default_availability_rows, get_open_slots
 
+
+def confirmed_booking_count(db: Session, user_id: int) -> int:
+    return (
+        db.query(Appointment)
+        .filter(Appointment.user_id == user_id, Appointment.status == "confirmed")
+        .count()
+    )
+
+
+def can_accept_bookings(db: Session, user: User) -> bool:
+    if (user.plan_status or "free") == "active":
+        return True
+    return confirmed_booking_count(db, user.id) < settings.free_booking_limit
+
+
 Base.metadata.create_all(bind=engine)
 migrate_schema()
 
 app = FastAPI(title="Calvio API", version="0.1.0")
 
+frontend_origin = (settings.frontend_url or "").rstrip("/")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url, "http://127.0.0.1:5173"],
+    allow_origins=[
+        frontend_origin,
+        "https://calvio-three.vercel.app",
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+    ],
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -71,6 +94,9 @@ def business_out(user: User) -> BusinessOut:
         for row in sorted(user.availability, key=lambda r: r.day_of_week)
     ]
     plan_status = user.plan_status or "free"
+    is_pro = plan_status == "active"
+    used = sum(1 for appt in user.appointments if appt.status == "confirmed")
+    remaining = None if is_pro else max(settings.free_booking_limit - used, 0)
     return BusinessOut(
         id=user.id,
         email=user.email,
@@ -79,7 +105,10 @@ def business_out(user: User) -> BusinessOut:
         bio=user.bio or "",
         slot_minutes=user.slot_minutes,
         plan_status=plan_status,
-        is_pro=plan_status == "active",
+        is_pro=is_pro,
+        bookings_used=used,
+        bookings_limit=settings.free_booking_limit,
+        bookings_remaining=remaining,
         availability=availability,
     )
 
@@ -303,17 +332,22 @@ def create_checkout(user: User = Depends(get_current_user), db: Session = Depend
     if (user.plan_status or "free") == "active":
         raise HTTPException(status_code=400, detail="You already have Calvio Pro")
 
-    customer_id = ensure_customer(db, user)
-    session = stripe.checkout.Session.create(
-        mode="subscription",
-        customer=customer_id,
-        line_items=[{"price": settings.stripe_price_id, "quantity": 1}],
-        success_url=f"{settings.frontend_url}/dashboard?billing=success",
-        cancel_url=f"{settings.frontend_url}/dashboard?billing=cancel",
-        client_reference_id=str(user.id),
-        metadata={"user_id": str(user.id)},
-        subscription_data={"metadata": {"user_id": str(user.id)}},
-    )
+    try:
+        customer_id = ensure_customer(db, user)
+        session = stripe.checkout.Session.create(
+            mode="subscription",
+            customer=customer_id,
+            line_items=[{"price": settings.stripe_price_id, "quantity": 1}],
+            success_url=f"{frontend_origin}/dashboard?billing=success",
+            cancel_url=f"{frontend_origin}/dashboard?billing=cancel",
+            client_reference_id=str(user.id),
+            metadata={"user_id": str(user.id)},
+            subscription_data={"metadata": {"user_id": str(user.id)}},
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise stripe_error(exc) from exc
     if not session.url:
         raise HTTPException(status_code=500, detail="Could not start Stripe Checkout")
     return CheckoutResponse(url=session.url)
@@ -322,11 +356,16 @@ def create_checkout(user: User = Depends(get_current_user), db: Session = Depend
 @app.post("/api/billing/portal", response_model=PortalResponse)
 def create_portal(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     require_stripe()
-    customer_id = ensure_customer(db, user)
-    session = stripe.billing_portal.Session.create(
-        customer=customer_id,
-        return_url=f"{settings.frontend_url}/dashboard",
-    )
+    try:
+        customer_id = ensure_customer(db, user)
+        session = stripe.billing_portal.Session.create(
+            customer=customer_id,
+            return_url=f"{frontend_origin}/dashboard",
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise stripe_error(exc) from exc
     return PortalResponse(url=session.url)
 
 
@@ -399,6 +438,7 @@ def public_business(slug: str, db: Session = Depends(get_db)):
         slug=user.slug,
         bio=user.bio or "",
         slot_minutes=user.slot_minutes,
+        accepting_bookings=can_accept_bookings(db, user),
     )
 
 
@@ -411,7 +451,7 @@ def public_slots(
     user = db.query(User).filter(User.slug == slugify(slug)).first()
     if not user:
         raise HTTPException(status_code=404, detail="Booking page not found")
-    if day < date.today():
+    if day < date.today() or not can_accept_bookings(db, user):
         return []
     return [SlotOut(starts_at=start, ends_at=end) for start, end in get_open_slots(db, user, day)]
 
@@ -421,6 +461,11 @@ def public_book(slug: str, payload: BookRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.slug == slugify(slug)).first()
     if not user:
         raise HTTPException(status_code=404, detail="Booking page not found")
+    if not can_accept_bookings(db, user):
+        raise HTTPException(
+            status_code=403,
+            detail="This business has used its 2 free bookings. Ask them to upgrade to Calvio Pro.",
+        )
 
     starts_at = payload.starts_at.replace(tzinfo=None)
     ends_at = starts_at + timedelta(minutes=user.slot_minutes)

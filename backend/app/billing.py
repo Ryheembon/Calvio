@@ -19,6 +19,11 @@ def require_stripe() -> None:
     stripe.api_key = settings.stripe_secret_key
 
 
+def stripe_error(exc: Exception) -> HTTPException:
+    message = getattr(exc, "user_message", None) or str(exc)
+    return HTTPException(status_code=400, detail=f"Stripe error: {message}")
+
+
 def plan_from_subscription_status(status: str | None) -> str:
     if status in ("active", "trialing"):
         return "active"
